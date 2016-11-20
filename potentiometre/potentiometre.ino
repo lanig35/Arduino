@@ -40,7 +40,7 @@ void loop() {
     Serial.write (angle);
   //  i++;
   }
-  delay(1000);
+  delay(10000);
 }
 
 
