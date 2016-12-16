@@ -32,6 +32,7 @@ it = pyfirmata.util.Iterator (board)
 it.start()
 
 a0  =   board.get_pin('a:0:i')
+a0.enable_reporting ()
 l3 = board.get_pin ('d:3:p')
 try:
     while True:
