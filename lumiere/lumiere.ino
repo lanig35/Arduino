@@ -8,15 +8,16 @@
 #define NOT_AN_INTERRUPT -1
 
 // interfaces des capteurs
-const byte lum_pin = A2;
+const byte blue_pot = A2;
 const byte temp_pin = A3;
-const byte pot_pin = A1;
+const byte green_pot = A1;
 
 // interface des leds
 const byte red_led = 4;
 const byte blue_led = 5;
 const byte yellow_led = 6;
-const byte pot_led = 9;
+const byte blue_pot_led = 9;
+const byte green_pot_led = 10;
 
 // interface des boutons
 const byte red_button = 2;
@@ -27,26 +28,34 @@ byte yellow_state = LOW;
 volatile byte red_state = LOW;
 volatile byte blue_state = LOW;
 
-// pour calibrage photoresistance
-int lum_min = 1023;
-int lum_max = 0;
-
 // pour debounce bouton sur interruption
 #define BOUNCE_DELAY 250
 volatile unsigned long last_toogle_time = 0;
 
 // pour gestion delai entre 2 acqusitions
-#define SENSE_INTERVAL 3000
+#define SENSE_INTERVAL 10000
 unsigned long previous_time = 0;
 unsigned long current_time = 0;
 
 // variables utilisées dans setup et/ou loop
- int sensor_value = 0;
- int lum_value = 0;
- int pot_value = 0;
- float temp_value = 0.0;
- float voltage = 0.0;
+int sensor_value = 0;
+int green_pot_value = 0;
+int blue_pot_value = 0;
+float temp_value = 0.0;
+float voltage = 0.0;
  
+int analyse_pot (byte pot, byte led) {
+  int pot_value = 0;
+  
+  // lecture potentiomètre (idem)
+  analogRead (pot);
+  pot_value = analogRead (pot);
+  pot_value = map (pot_value, 0, 1023, 0, 255);
+  // lumiere LED
+  analogWrite (led, pot_value);
+  return (pot_value);
+}
+
 void setup() {
   // lancement port série
   Serial.begin (9600);
@@ -54,23 +63,18 @@ void setup() {
     ;
   }
 
-  // calibrage photoresistance
+  // sequence d'accueil
   pinMode (yellow_led, OUTPUT);
-  digitalWrite (yellow_led, HIGH);
-  while (millis () < 10000) {
-    analogRead (lum_pin); // lecture en 2 fois pour pb impedance
-    sensor_value = analogRead (lum_pin);
-    if (sensor_value > lum_max) {
-      lum_max = sensor_value;
-    }
-    if (sensor_value < lum_min) {
-      lum_min = sensor_value;
-    }
+  for (int i=1; i<10; i++) {
+    digitalWrite (yellow_led, HIGH);
+    delay (i * 100);
+    digitalWrite (yellow_led, LOW);
+    delay (200);
   }
-  digitalWrite (yellow_led, LOW);
   
-  // LED en mode PWN avec potentiometre
-  pinMode (pot_led, OUTPUT);
+  // LEDs en mode PWN avec potentiometres
+  pinMode (blue_pot_led, OUTPUT);
+  pinMode (green_pot_led, OUTPUT);
   
   // mise en place interruption boutons
   pinMode (red_led, OUTPUT);
@@ -99,25 +103,15 @@ void loop() {
     voltage = (sensor_value / 1024.0) * 5.0;
     temp_value = (voltage - 0.5) * 100;
     
-    // lecture capteur lumière (idem)
-    analogRead (lum_pin);
-    lum_value = analogRead (lum_pin);
-    lum_value = map (lum_value, lum_min, lum_max, 0, 255);
-    lum_value = constrain (lum_value, 0, 255);
-    
-    // lecture potentiomètre (idem)
-    analogRead (pot_pin);
-    pot_value = analogRead (pot_pin);
-    pot_value = map (pot_value, 0, 1023, 0, 255);
-    // lumiere LED
-    analogWrite (pot_led, pot_value);
+    blue_pot_value = analyse_pot (blue_pot, blue_pot_led);
+    green_pot_value = analyse_pot (green_pot, green_pot_led);
     
     // écriture mesures port série
     Serial.print (temp_value);
     Serial.print ("-");
-    Serial.print (lum_value);
+    Serial.print (green_pot_value);
     Serial.print ("-");
-    Serial.println (pot_value);
+    Serial.println (blue_pot_value);
     
     // scintillement jaune
     yellow_state = !yellow_state;

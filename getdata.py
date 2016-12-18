@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 
 # connexion serveur MQTT Mosquito
 def on_connect (client, userdata, flags, rc):
-    print ("connecté avec code {}".format (rc))
+    print "connecté avec code: " + str(rc)
 
 client = mqtt.Client ()
 client.on_connect = on_connect
