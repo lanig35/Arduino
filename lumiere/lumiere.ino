@@ -32,9 +32,18 @@ volatile byte blue_state = LOW;
 #define BOUNCE_DELAY 250
 volatile unsigned long last_toogle_time = 0;
 
+// pour lecture commande sur port série
+char cmd [2];
+bool cmd_end = false;
+
 // pour gestion delai entre 2 acqusitions
-#define SENSE_INTERVAL 10000
-unsigned long previous_time = 0;
+#define TEMP_INTERVAL 10000
+#define POT_INTERVAL  3000
+#define YELLOW_INTERVAL 1000
+
+unsigned long prev_temp_time = 0;
+unsigned long prev_pot_time = 0;
+unsigned long prev_yellow_time = 0;
 unsigned long current_time = 0;
 
 // variables utilisées dans setup et/ou loop
@@ -54,6 +63,21 @@ int analyse_pot (byte pot, byte led) {
   // lumiere LED
   analogWrite (led, pot_value);
   return (pot_value);
+}
+
+void serialEvent () {
+  while (Serial.available ()) {
+    char recv = (char)Serial.read ();
+    if (recv == '\n') {
+      cmd_end = true;
+      index_cmd = 0;
+    } else {
+      if (index_cmd <= 1) {
+        cdm[index_cmd] = recv;
+        index_cmd++;
+      }
+    }
+  }
 }
 
 void setup() {
@@ -94,8 +118,37 @@ void setup() {
 
 void loop() {
   current_time = millis ();
-  if (current_time - previous_time >= SENSE_INTERVAL) {
-    previous_time = current_time;
+  
+  if (cmd_end == true) {
+    switch cmd[0] {
+      case 'R':
+        if (isDigit (cmd[1]) {
+          // inversion LED rouge
+          unsigned byte state = atoi(cmd[1];
+          if ((state == LOW) || (state == HIGH)) {
+            red_state = state;
+            digitalWrite (red_led, red_state);
+          }
+        }
+        break;
+      case 'B':
+        if (isDigit (cmd[1]) {
+          // inversion LED bleue
+          unsigned byte state = atoi(cmd[1];
+          if ((state == LOW) || (state == HIGH)) {
+            blue_state = state;
+            digitalWrite (blue_led, blue_state);
+          }
+        }
+        break;
+      default:
+        break;
+    }
+    cmd_end = false;
+  }
+  
+  if (current_time - prev_temp_time >= TEMP_INTERVAL) {
+    prev_temp_time = current_time;
     
     // lecture capteur temperature (2 fois pour pb impédance ?)
     analogRead (temp_pin);
@@ -103,15 +156,25 @@ void loop() {
     voltage = (sensor_value / 1024.0) * 5.0;
     temp_value = (voltage - 0.5) * 100;
     
+    Serial.print ("t:");
+    Serial.println (temp_value);
+  }
+  
+  if (current_time - pot_temp_time >= POT_INTERVAL) {
+    pot_temp_time = current_time;
+    
     blue_pot_value = analyse_pot (blue_pot, blue_pot_led);
     green_pot_value = analyse_pot (green_pot, green_pot_led);
     
     // écriture mesures port série
-    Serial.print (temp_value);
-    Serial.print ("-");
+    Serial.print ("p:");
     Serial.print (green_pot_value);
     Serial.print ("-");
     Serial.println (blue_pot_value);
+  }
+  
+  if (current_time - yellow_temp_time >= YELLOW_INTERVAL) {
+    yellow_temp_time = current_time;
     
     // scintillement jaune
     yellow_state = !yellow_state;
