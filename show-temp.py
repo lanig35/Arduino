@@ -32,9 +32,9 @@ def on_disconnect (client, userdata, rc):
     print "déconnecté: {code}".format (code=str(rc))
 
 def on_log (client, userdata, level, buf):
-    print "log: {c}-{l}-{b}".format (c=client, l=level, b=buf)
+    print "log:{l}-{b}".format (l=level, b=buf)
 
-client = mqtt.Client (client_id='temp', userdata='opaque')
+client = mqtt.Client (client_id='temp-plot', userdata='opaque')
 client.will_set (topic='monitor/temp', payload='Bye', qos=0)
 
 client.on_connect = on_connect
@@ -53,7 +53,9 @@ client.subscribe (topic='sensors/temp', qos=0)
 
 rc = 0
 while rc == 0:
-    rc = client.loop ()
+	rc = client.loop ()
+	# pour activer boucle évènement fenêtre
+	pyplot.pause (1)
 
 print ('Fin!')
 
