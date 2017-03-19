@@ -1,50 +1,44 @@
 #!/usr/bin/env python
-#coding: utf-8
 # -*- coding: utf-8 -*-
 import sys, os, platform, argparse
-import logging, logging.handlers
+from util import util
 sys.path.remove (os.getcwd())	# pour pb import serial sous Centos 6.x python 2.6
 
+# gestion des options en ligne de commande
+parser = argparse.ArgumentParser (description='Interface carte Arduino et broker MQTT',
+                                  epilog='port série COM4 si Windows - /dev/ttyACM0 si Linux')
+parser.add_argument ('--broker', '-b', default='127.0.0.1', help='MQTT broker address - default to localhost')
+parser.add_argument ('--port', '-p', default=1883, type=int, help='MQTT broker port - default to 1883')
+parser.add_argument ('--id', '-i', default='arduino', help='Id of MQTT client - default to Arduino')
+parser.add_argument ('--user', '-u', default='arduino', help='username to log to MQTT broker')
+parser.add_argument ('--debug', '-d', action='store_true', help='Enable MQTT tracing')
+parser.add_argument ('--quiet', '-q', action='store_true', help='Disable console tracing')
+
+args = parser.parse_args ()
+
+# Gestion des logs
+logger = util.init_log ('getdata', args.quiet)
+
+# récupération mot de passe pour connexion MQTT broker
+try:
+	mqtt_passwd = os.environ['MQTT_PASSWD']
+except KeyError as e:
+	logger.error ('Please set MQTT_PASSWD environment variable')
+	exit (1)
+	
+# import des librairies 
 try:
 	import serial
 	import paho.mqtt.client as mqtt
 except ImportError as e:
-	print (str(e).encode('utf8'))
+	logger.critical (e)
 	exit (1)
 
-# gestion des options en ligne de commande
-parser = argparse.ArgumentParser (description='Interface carte Arduino et broker MQTT',
-								   epilog='port série COM4 si Windows - /dev/ttyACM0 si Linux')
-parser.add_argument ('--broker', '-b', default='127.0.0.1', help='MQTT broker address - default to localhost')
-parser.add_argument ('--port', '-p', default=1883, type=int, help='MQTT broker port - default to 1883')
-parser.add_argument ('--id', '-i', default='arduino', help='Id of MQTT client - default to Arduino')
-parser.add_argument ('--log', '-l', action='store_true', help='Enable MQTT tracing')
-parser.add_argument ('--quiet', '-q', action='store_true', help='Disable console tracing')
-
-args = parser.parse_args ()
-print args
-
-# Gestion des logs
-logging.basicConfig (level=logging.DEBUG)
-logger = logging.getLogger ('getdata')
-file_handler = logging.handlers.RotatingFileHandler (filename='log/getdata.log', mode='a',
-													 maxBytes=10000, backupCount=5,
-													 encoding='utf8', delay=False)
-file_handler.setLevel (logging.INFO)
-formatter = logging.Formatter (fmt='%(asctime)s;%(name)s;%(levelname)s;%(message)s',
-                               datefmt='%Y-%m-%d %H:%M:%S')
-file_handler.setFormatter (formatter)
-logger.addHandler (file_handler)
-
-if args.quiet is False:
-	stream_handler = logging.StreamHandler ()
-	stream_handler.setLevel (logging.DEBUG)
-	logger.addHandler (stream_handler)
-
-# création objet Serial pour utilisation call-back MQTT
+# création objet Serial
 ser = serial.Serial ()
 ser.baudrate = 9600
 ser.timeout = 10
+
 # vérification OS pour nommage driver port série
 platform_name = platform.system ()
 if platform_name == 'Windows':
@@ -57,10 +51,21 @@ else:
 
 logger.info ('Starting program - running on: {0}'.format (platform_name))
 
-# mise en place call-backs MQTT Mosquito ('userdata' correspond au logger)
+# définition call-backs MQTT Mosquito ('userdata' correspond au logger)
 def on_connect (client, userdata, flags, rc):
 	if rc != 0:
-		userdata.critical ('MQTT connexion error: {code}'.format(code=str(rc)))
+		if rc == 1:
+			userdata.error ('MQTT connexion Error: incorrect protocol')
+		elif rc == 2:
+			userdata.error ('MQTT connexion Error: invalid client identifier')
+		elif rc == 3:
+			userdata.critical ('MQTT connexion Error: server unavailable')
+		elif rc == 4:
+			userdata.error ('MQTT connexion Error: bad username or password')
+		elif rc == 5:
+			userdata.error ('MQTT connexion Error: not authorized')
+		else:
+			userdata.critical ('MQTT connexion error: {code}'.format(code=str(rc)))
 		exit (1)
 	userdata.info ('MQTT connexion success')
 
@@ -92,23 +97,24 @@ def on_disconnect (client, userdata, rc):
 def on_log (client, userdata, level, buf):
     userdata.info ('MQTT log: {l}-{b}'.format (l=level, b=buf))
 
-# création du client MQTT et mise en place du 'will'
+# création du client MQTT, mise en place du 'will' et infos de connexion
 client = mqtt.Client (client_id=args.id, clean_session=True, userdata=logger)
 client.will_set (topic='monitor/arduino', payload='Aborting', qos=0, retain=True)
+client.username_pw_set (username=args.user, password=mqtt_passwd)
 
 # mise en place des call-backs
 client.on_connect = on_connect
 client.on_subscribe = on_subscribe
 client.on_message = on_message
 client.on_disconnect = on_disconnect
-if args.log is True:
+if args.debug is True:
 	client.on_log = on_log
 
 # tentative connection au broker MQTT
 try:
     client.connect (host=args.broker, port=args.port, keepalive=60)
 except IOError as e:
-	logger.critical (e.strerror.decode ('latin_1'))
+	logger.critical (e)
 	exit (1)
 
 # démarrage boucle évènements MQTT
@@ -140,11 +146,11 @@ try:
 		if msg[0] == 't':
 			data = msg.split (':')
 			logger.info ('temperature: {t}'.format (t=float(data[1])))
-			client.publish (topic='sensors/temp', payload=float(data[1]), qos=0, retain=False)
+			(rc, mid) = client.publish (topic='sensors/temp', payload=float(data[1]), qos=0, retain=False)
 		elif msg[0] == 'p':
 			data = msg.split (':')
 			logger.info ('potentiometer: {p}'.format (p=int(data[1])))
-			client.publish (topic='sensors/pot', payload=int(data[1]), qos=0, retain=False)
+			(rc, mid) = client.publish (topic='sensors/pot', payload=int(data[1]), qos=0, retain=False)
 		else:
 			logger.warning ('unexpected message from Arduino: {0}'.format (msg))
 except KeyboardInterrupt as e:

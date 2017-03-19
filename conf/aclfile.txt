@@ -1,0 +1,25 @@
+user monitor
+topic read $SYS/#
+topic read monitor/#
+
+user arduino
+topic write monitor/arduino
+topic write sensors/#
+topic read tone
+topic read led/#
+
+topic read dummy
+topic read remote/#
+
+user plot
+topic write monitor/plot
+topic write led/#
+topic write tone
+topic read sensors/#
+
+topic write dummy
+topic write local/#
+topic write remote/#
+
+# This affects all clients.
+pattern write $SYS/broker/connection/%c/state

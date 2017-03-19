@@ -1,4 +1,5 @@
-#Arduino libaries
+*.xml
+#Arduino libraries
 libraries
 # log folder
 log/
