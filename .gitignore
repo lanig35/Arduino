@@ -1,4 +1,6 @@
 *.xml
+# 
+.gitconfig
 #Arduino libraries
 libraries
 # log folder
